@@ -16,22 +16,15 @@ import org.spongepowered.asm.mixin.Shadow;
 @SuppressWarnings("DataFlowIssue")
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin implements ProjectionGetter {
-	@Shadow protected abstract double getFov(Camera activeRenderInfo, float partialTicks, boolean useFOVSetting);
 	@Shadow @Final private Camera mainCamera;
-	
 	@Shadow private float zoom;
-	
 	@Shadow private float zoomX;
-	
 	@Shadow private float zoomY;
-	
-	@Shadow @Final Minecraft minecraft;
-	
+	@Shadow @Final private Minecraft minecraft;
 	@Shadow protected abstract void bobHurt(PoseStack poseStack, float partialTicks);
-	
 	@Shadow protected abstract void bobView(PoseStack poseStack, float partialTicks);
-	
 	@Shadow private int confusionAnimationTick;
+	@Shadow protected abstract float getFov(Camera camera, float partialTicks, boolean useFOVSetting);
 	
 	public Matrix4f getProjectionMatrix(float farPlane, float partialTicks) {
 		double fov = this.getFov(this.mainCamera, partialTicks, true);

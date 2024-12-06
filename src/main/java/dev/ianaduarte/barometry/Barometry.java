@@ -90,7 +90,7 @@ public class Barometry implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		FabricLoader.getInstance().getModContainer(MOD_ID).ifPresent(modContainer -> {
-			ResourceManagerHelper.registerBuiltinResourcePack(getLocation("shader_patch"), modContainer, ResourcePackActivationType.DEFAULT_ENABLED);
+			ResourceManagerHelper.registerBuiltinResourcePack(getLocation("shader_patch"), modContainer, ResourcePackActivationType.ALWAYS_ENABLED);
 		});
 	}
 }
