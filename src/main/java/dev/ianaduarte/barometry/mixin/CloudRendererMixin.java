@@ -9,6 +9,7 @@ import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.*;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
@@ -39,7 +40,7 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 	public void render(int cloudColor, CloudStatus cloudStatus, float cloudHeight, Matrix4f modelMatrix, Matrix4f projectionMatrix, Vec3 cameraPos, float currentTick) {
 		if(this.texture == null) return;
 		
-		float partialTick = currentTick - (long)currentTick;
+		float partialTick = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true);
 		float relativeY = (float)(cloudHeight - cameraPos.y);
 		CloudRenderer.RelativeCameraPos relativeCameraPos;
 		
@@ -64,10 +65,16 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 		
 		if(this.vertexBufferEmpty) return;
 		
-		Vector4f color = Barometry.getCloudColor(Minecraft.getInstance().player.clientLevel, partialTick);
+		FogParameters fogParams = RenderSystem.getShaderFog();
+		Vector4f color = new Vector4f(
+			Mth.lerp(0.125f, ARGB.redFloat(cloudColor), fogParams.red()),
+			Mth.lerp(0.125f, ARGB.greenFloat(cloudColor), fogParams.green()),
+			Mth.lerp(0.125f, ARGB.blueFloat(cloudColor), fogParams.blue()),
+			0.8f
+		);
 		float darkness = 1 - (forecast * 0.25f);
 		color.mul(darkness, darkness, darkness, 1);
-		//RenderSystem.setShaderColor(ARGB.redFloat(cloudColor), ARGB.greenFloat(cloudColor), ARGB.blueFloat(cloudColor), 1.0F);
+		RenderSystem.setShaderColor(color.x, color.y, color.z, color.w);
 		
 		float offset = (float)Mth.lerp(partialTick, cloudOffsetPrev, cloudOffset);
 		float cloudX  = (float)(cameraPos.x / 12 + offset * 0.01);
@@ -76,28 +83,39 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 		float cForecast = Mth.lerp(partialTick, forecastPrev, forecast);
 		
 		Matrix4f extendedFarplane = ((ProjectionGetter)Minecraft.getInstance().gameRenderer).getProjectionMatrix(10_000, partialTick);
+		
+		RenderSystem.setShaderFog(new FogParameters(
+			fogParams.start(), fogParams.end(),
+			fogParams.shape(),
+			fogParams.red(),
+			fogParams.green(),
+			fogParams.blue(),
+			fogParams.alpha()
+		));
+		RenderType.clouds().setupRenderState();
+		
 		switch(relativeCameraPos) {
 			case INSIDE_CLOUDS, ABOVE_CLOUDS -> {
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
 			}
 			case BELOW_CLOUDS -> {
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
-				this.drawWithRenderType(RenderType.clouds(), modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
+				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
 			}
 		}
+		RenderType.clouds().clearRenderState();
 		
 		VertexBuffer.unbind();
 	}
 	
 	
 	@Unique
-	void drawWithRenderType(RenderType renderType, Matrix4f modelMatrix, Matrix4f projectionMatrix, float xOffset, float height, float zOffset, Vector4f color, int layer, float forecast) {
-		renderType.setupRenderState();
+	void drawWithRenderType(Matrix4f modelMatrix, Matrix4f projectionMatrix, float xOffset, float height, float zOffset, Vector4f color, int layer, float forecast) {
 		RenderSystem.disableCull();
 		ResourceLocation cloudTexture = Barometry.getCloudTexture(forecast, layer);
 		Minecraft.getInstance().getTextureManager().getTexture(cloudTexture).setFilter(false, false);
@@ -112,7 +130,6 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 		
 		this.vertexBuffer.drawWithShader(modelMatrix, projectionMatrix, compiledShaderProgram);
 		RenderSystem.enableCull();
-		renderType.clearRenderState();
 	}
 	@Unique
 	private MeshData buildClouds(Tesselator tesselator) {

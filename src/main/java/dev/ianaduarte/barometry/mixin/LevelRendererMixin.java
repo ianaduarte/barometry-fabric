@@ -19,7 +19,7 @@ public abstract class LevelRendererMixin {
 	@Inject(method = "tick", at = @At("HEAD"))
 	private void updateClouds(CallbackInfo ci) {
 		float forecast = this.level.getRainLevel(1) + this.level.getThunderLevel(1);
-		float speed    = Barometry.gradient(forecast / 2, 0.5f, 1.5f, 2.5f);
+		float speed    = Barometry.gradient(forecast / 2, 0.5f, 1.5f, 2.5f) + 0.5f;
 		
 		((ExtCloudRenderer)this.cloudRenderer).tick(forecast, speed);
 	}
