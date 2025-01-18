@@ -108,6 +108,7 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
 			}
 		}
+		RenderSystem.setShaderColor(1, 1, 1, 1);
 		RenderType.clouds().clearRenderState();
 		
 		VertexBuffer.unbind();
