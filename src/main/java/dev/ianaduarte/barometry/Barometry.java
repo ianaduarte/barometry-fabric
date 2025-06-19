@@ -5,9 +5,6 @@ import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
-import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.util.Mth;
@@ -24,8 +21,8 @@ public class Barometry implements ModInitializer {
 	
 	public static final RenderPipeline BAROMETRY_CLOUDS_PIPELINE = RenderPipelines.register(
 		RenderPipeline.builder(RenderPipelines.MATRICES_COLOR_FOG_OFFSET_SNIPPET)
-			.withVertexShader("core/rendertype_bclouds")
-			.withFragmentShader("core/rendertype_bclouds")
+			.withVertexShader(getLocation("core/rendertype_bclouds"))
+			.withFragmentShader(getLocation("core/rendertype_bclouds"))
 			.withSampler("Sampler0")
 			.withUniform("cloudColor", UniformType.VEC4)
 			.withUniform("uvOffset", UniformType.VEC2)
@@ -108,8 +105,5 @@ public class Barometry implements ModInitializer {
 
 	@Override
 	public void onInitialize() {
-		FabricLoader.getInstance().getModContainer(MOD_ID).ifPresent(modContainer -> {
-			ResourceManagerHelper.registerBuiltinResourcePack(getLocation("shader_patch"), modContainer, ResourcePackActivationType.ALWAYS_ENABLED);
-		});
 	}
 }

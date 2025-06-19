@@ -27,6 +27,6 @@ void main() {
 	vec4 color = texture(Sampler0, texCoord0 + uvOffset) * cloudColor;
 	if(color.a < 0.01) discard;
 	float d = length(texCoord0) * 512;
-	float fstart = clamp(FogStart, 0, 496);
+	float fstart = clamp(FogStart * 0.625, 0, 496);
 	fragColor = linear_fog(color, d, fstart, clamp(FogEnd, fstart, 512));
 }

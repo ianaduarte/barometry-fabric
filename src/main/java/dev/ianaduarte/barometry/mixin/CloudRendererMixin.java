@@ -28,7 +28,6 @@ import org.spongepowered.asm.mixin.*;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 
-@SuppressWarnings("DataFlowIssue")
 @Mixin(CloudRenderer.class)
 public abstract class CloudRendererMixin implements ExtCloudRenderer {
 	@Shadow private GpuBuffer vertexBuffer;
