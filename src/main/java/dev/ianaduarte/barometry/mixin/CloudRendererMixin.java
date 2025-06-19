@@ -1,6 +1,14 @@
 package dev.ianaduarte.barometry.mixin;
 
+import com.mojang.blaze3d.ProjectionType;
+import com.mojang.blaze3d.buffers.BufferType;
+import com.mojang.blaze3d.buffers.BufferUsage;
+import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.vertex.*;
 import dev.ianaduarte.barometry.Barometry;
 import dev.ianaduarte.barometry.ExtCloudRenderer;
@@ -17,16 +25,20 @@ import org.joml.Matrix4f;
 import org.joml.Vector4f;
 import org.spongepowered.asm.mixin.*;
 
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+
 @SuppressWarnings("DataFlowIssue")
 @Mixin(CloudRenderer.class)
 public abstract class CloudRendererMixin implements ExtCloudRenderer {
-	@Shadow @Final private VertexBuffer vertexBuffer;
+	@Shadow private GpuBuffer vertexBuffer;
 	@Shadow private boolean needsRebuild;
 	@Shadow private CloudRenderer.RelativeCameraPos prevRelativeCameraPos;
 	@Shadow private @Nullable CloudStatus prevType;
-	@Shadow private boolean vertexBufferEmpty;
 	@Shadow @Nullable private CloudRenderer.@Nullable TextureData texture;
 	
+	@Shadow private int indexCount;
+	@Shadow @Final private RenderSystem.AutoStorageIndexBuffer indices;
 	@Unique float forecastPrev = 0;
 	@Unique float forecast = 0;
 	@Unique double cloudOffsetPrev = 0;
@@ -34,36 +46,43 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 	
 	/**
 	 * @author ianaduarte
-	 * @reason testing testing 123
+	 * @reason i can't just patch this function, it's better to overwrite it. sorry
 	 */
 	@Overwrite
-	public void render(int cloudColor, CloudStatus cloudStatus, float cloudHeight, Matrix4f modelMatrix, Matrix4f projectionMatrix, Vec3 cameraPos, float currentTick) {
+	public void render(int cloudColor, CloudStatus cloudStatus, float height, Vec3 cameraPos, float ticks) {
 		if(this.texture == null) return;
 		
 		float partialTick = Minecraft.getInstance().getDeltaTracker().getGameTimeDeltaPartialTick(true);
-		float relativeY = (float)(cloudHeight - cameraPos.y);
+		float relativeY = (float)(height - cameraPos.y);
 		CloudRenderer.RelativeCameraPos relativeCameraPos;
 		
 		if(relativeY < 0) relativeCameraPos = CloudRenderer.RelativeCameraPos.ABOVE_CLOUDS;
 		else if(relativeY > 0) relativeCameraPos = CloudRenderer.RelativeCameraPos.BELOW_CLOUDS;
 		else relativeCameraPos = CloudRenderer.RelativeCameraPos.INSIDE_CLOUDS;
 		
-		this.vertexBuffer.bind();
 		if(this.needsRebuild || relativeCameraPos != this.prevRelativeCameraPos || cloudStatus != this.prevType) {
 			this.needsRebuild = false;
 			this.prevRelativeCameraPos = relativeCameraPos;
 			this.prevType = cloudStatus;
 			
-			MeshData meshData = this.buildClouds(Tesselator.getInstance());
-			if(meshData != null) {
-				this.vertexBuffer.upload(meshData);
-				this.vertexBufferEmpty = false;
-			} else {
-				this.vertexBufferEmpty = true;
+			try(MeshData meshData = this.buildClouds(Tesselator.getInstance())) {
+				if(this.vertexBuffer != null && this.vertexBuffer.size >= meshData.vertexBuffer().remaining()) {
+					CommandEncoder commandEncoder = RenderSystem.getDevice().createCommandEncoder();
+					commandEncoder.writeToBuffer(this.vertexBuffer, meshData.vertexBuffer(), 0);
+				}
+				else {
+					if(this.vertexBuffer != null) this.vertexBuffer.close();
+					
+					this.vertexBuffer = RenderSystem
+						.getDevice()
+						.createBuffer(() -> "Cloud vertex buffer", BufferType.VERTICES, BufferUsage.DYNAMIC_WRITE, meshData.vertexBuffer());
+				}
+				
+				this.indexCount = meshData.drawState().indexCount();
 			}
 		}
 		
-		if(this.vertexBufferEmpty) return;
+		if(this.indexCount == 0) return;
 		
 		FogParameters fogParams = RenderSystem.getShaderFog();
 		Vector4f color = new Vector4f(
@@ -82,8 +101,9 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 		
 		float cForecast = Mth.lerp(partialTick, forecastPrev, forecast);
 		
-		Matrix4f extendedFarplane = ((ProjectionGetter)Minecraft.getInstance().gameRenderer).getProjectionMatrix(10_000, partialTick);
-		
+		Matrix4f extendedFarplane = ((ProjectionGetter)Minecraft.getInstance().gameRenderer).fetchProjectionMatrix(10_000, partialTick);
+		RenderSystem.backupProjectionMatrix();
+		RenderSystem.setProjectionMatrix(extendedFarplane, ProjectionType.PERSPECTIVE);
 		RenderSystem.setShaderFog(new FogParameters(
 			fogParams.start(), fogParams.end(),
 			fogParams.shape(),
@@ -92,46 +112,62 @@ public abstract class CloudRendererMixin implements ExtCloudRenderer {
 			fogParams.blue(),
 			fogParams.alpha()
 		));
-		RenderType.clouds().setupRenderState();
-		
 		switch(relativeCameraPos) {
 			case INSIDE_CLOUDS, ABOVE_CLOUDS -> {
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
+				this.drawWithRenderType(cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
+				this.drawWithRenderType(cloudX, relativeY    , cloudZ, color, 1, cForecast);
+				this.drawWithRenderType(cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
+				this.drawWithRenderType(cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
 			}
 			case BELOW_CLOUDS -> {
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY    , cloudZ, color, 1, cForecast);
-				this.drawWithRenderType(modelMatrix, extendedFarplane, cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
+				this.drawWithRenderType(cloudX, relativeY + 2, cloudZ, color, 3, cForecast);
+				this.drawWithRenderType(cloudX, relativeY + 1, cloudZ, color, 2, cForecast);
+				this.drawWithRenderType(cloudX, relativeY    , cloudZ, color, 1, cForecast);
+				this.drawWithRenderType(cloudX, relativeY - 1, cloudZ, color, 0, cForecast);
 			}
 		}
 		RenderSystem.setShaderColor(1, 1, 1, 1);
-		RenderType.clouds().clearRenderState();
-		
-		VertexBuffer.unbind();
+		RenderSystem.restoreProjectionMatrix();
 	}
-	
 	
 	@Unique
-	void drawWithRenderType(Matrix4f modelMatrix, Matrix4f projectionMatrix, float xOffset, float height, float zOffset, Vector4f color, int layer, float forecast) {
-		RenderSystem.disableCull();
+	private void drawWithRenderType(float x, float y, float z, Vector4f color, int layer, float forecast) {
+		RenderSystem.setModelOffset(0, y, 0);
 		ResourceLocation cloudTexture = Barometry.getCloudTexture(forecast, layer);
-		Minecraft.getInstance().getTextureManager().getTexture(cloudTexture).setFilter(false, false);
-		
-		RenderSystem.setShaderTexture(0, cloudTexture);
-		CompiledShaderProgram compiledShaderProgram = RenderSystem.getShader();
-		if (compiledShaderProgram != null) {
-			compiledShaderProgram.safeGetUniform("cloudColor").set(color.x, color.y, color.z, color.w);
-			compiledShaderProgram.safeGetUniform("uvOffset").set((xOffset % 256) / 256, (zOffset % 256) / 256);
-			if(compiledShaderProgram.MODEL_OFFSET != null) compiledShaderProgram.MODEL_OFFSET.set(0, height, 0);
+		RenderTarget mainTarget = Minecraft.getInstance().getMainRenderTarget();
+		RenderTarget cloudsTarget = Minecraft.getInstance().levelRenderer.getCloudsTarget();
+		GpuTexture colorBuffer;
+		GpuTexture depthBuffer;
+		if(cloudsTarget != null) {
+			colorBuffer = cloudsTarget.getColorTexture();
+			depthBuffer = cloudsTarget.getDepthTexture();
+		}
+		else {
+			colorBuffer = mainTarget.getColorTexture();
+			depthBuffer = mainTarget.getDepthTexture();
 		}
 		
-		this.vertexBuffer.drawWithShader(modelMatrix, projectionMatrix, compiledShaderProgram);
-		RenderSystem.enableCull();
+		GpuBuffer gpuBuffer = this.indices.getBuffer(this.indexCount);
+		GpuTexture gpuTexture = Minecraft.getInstance().getTextureManager().getTexture(cloudTexture).getTexture();
+		//RenderSystem.setShaderTexture(0, Minecraft.getInstance().getTextureManager().getTexture(cloudTexture).getTexture());
+		
+		try(RenderPass renderPass = RenderSystem
+			.getDevice()
+			.createCommandEncoder()
+			.createRenderPass(colorBuffer, OptionalInt.empty(), depthBuffer, OptionalDouble.empty())
+		) {
+			renderPass.setPipeline(Barometry.BAROMETRY_CLOUDS_PIPELINE);
+			renderPass.bindSampler("Sampler0", gpuTexture);
+			renderPass.setUniform("cloudColor", color.x, color.y, color.z, color.w);
+			renderPass.setUniform("uvOffset", (x % 256) / 256, (z % 256) / 256);
+			renderPass.setIndexBuffer(gpuBuffer, this.indices.type());
+			renderPass.setVertexBuffer(0, this.vertexBuffer);
+			renderPass.drawIndexed(0, this.indexCount);
+		}
+		
+		RenderSystem.resetModelOffset();
 	}
+	
 	@Unique
 	private MeshData buildClouds(Tesselator tesselator) {
 		BufferBuilder builder = tesselator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);

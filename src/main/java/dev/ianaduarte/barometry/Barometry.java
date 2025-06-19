@@ -1,9 +1,15 @@
 package dev.ianaduarte.barometry;
 
+import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
+import com.mojang.blaze3d.shaders.UniformType;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.util.Mth;
 import org.joml.Vector4f;
 import org.slf4j.Logger;
@@ -16,6 +22,19 @@ public class Barometry implements ModInitializer {
 	public static final String MOD_ID = "barometry";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 	
+	public static final RenderPipeline BAROMETRY_CLOUDS_PIPELINE = RenderPipelines.register(
+		RenderPipeline.builder(RenderPipelines.MATRICES_COLOR_FOG_OFFSET_SNIPPET)
+			.withVertexShader("core/rendertype_bclouds")
+			.withFragmentShader("core/rendertype_bclouds")
+			.withSampler("Sampler0")
+			.withUniform("cloudColor", UniformType.VEC4)
+			.withUniform("uvOffset", UniformType.VEC2)
+			.withBlend(BlendFunction.TRANSLUCENT)
+			.withVertexFormat(DefaultVertexFormat.POSITION_TEX, VertexFormat.Mode.QUADS)
+			.withLocation(getLocation("pipeline/bclouds"))
+			.withCull(false)
+			.build()
+	);
 	public static final ResourceLocation CLEAN_CLOUDS_LOCATION = getLocation("textures/environment/clouds_clean.png");
 	public static final ResourceLocation CLEAR_CLEAN_CLOUDS_LOCATION = getLocation("textures/environment/clouds_clear_clean.png");
 	public static final ResourceLocation CLEAR_CLOUDS_LOCATION = getLocation("textures/environment/clouds_clear.png");

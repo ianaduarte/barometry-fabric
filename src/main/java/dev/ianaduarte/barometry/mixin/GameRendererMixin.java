@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import dev.ianaduarte.barometry.ProjectionGetter;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffects;
@@ -23,23 +24,20 @@ public abstract class GameRendererMixin implements ProjectionGetter {
 	@Shadow @Final private Minecraft minecraft;
 	@Shadow protected abstract void bobHurt(PoseStack poseStack, float partialTicks);
 	@Shadow protected abstract void bobView(PoseStack poseStack, float partialTicks);
-	@Shadow private int confusionAnimationTick;
-	@Shadow protected abstract float getFov(Camera camera, float partialTicks, boolean useFOVSetting);
 	
-	public Matrix4f getProjectionMatrix(float farPlane, float partialTicks) {
-		double fov = this.getFov(this.mainCamera, partialTicks, true);
+	@Shadow protected abstract float getFov(Camera camera, float partialTicks, boolean useFOVSetting);
+	@Shadow private float spinningEffectTime;
+	@Shadow private float spinningEffectSpeed;
+	
+	public Matrix4f fetchProjectionMatrix(float farPlane, float partialTicks) {
+		float fov = this.getFov(this.mainCamera, partialTicks, true);
 		Matrix4f matrix4f = new Matrix4f();
-		if(this.zoom != 1.0F) {
+		if (this.zoom != 1.0F) {
 			matrix4f.translate(this.zoomX, -this.zoomY, 0.0F);
 			matrix4f.scale(this.zoom, this.zoom, 1.0F);
 		}
-		
-		matrix4f.perspective(
-			(float)(fov * (float) (Math.PI / 180.0)),
-			(float)this.minecraft.getWindow().getWidth() / (float)this.minecraft.getWindow().getHeight(),
-			0.05F,
-			farPlane
-		);
+		matrix4f.perspective(fov * (float) (Math.PI / 180.0), (float)this.minecraft.getWindow().getWidth() / this.minecraft.getWindow().getHeight(), 0.05F, farPlane);
+		LocalPlayer localPlayer = this.minecraft.player;
 		
 		PoseStack poseStack = new PoseStack();
 		this.bobHurt(poseStack, this.mainCamera.getPartialTickTime());
@@ -48,17 +46,18 @@ public abstract class GameRendererMixin implements ProjectionGetter {
 		}
 		
 		matrix4f.mul(poseStack.last().pose());
-		float h = this.minecraft.options.screenEffectScale().get().floatValue();
-		float i = Mth.lerp(partialTicks, this.minecraft.player.oSpinningEffectIntensity, this.minecraft.player.spinningEffectIntensity) * h * h;
-		if (i > 0.0F) {
-			int j = this.minecraft.player.hasEffect(MobEffects.CONFUSION) ? 7 : 20;
-			float k = 5.0F / (i * i + 5.0F) - i * 0.04F;
-			k *= k;
+		float i = this.minecraft.options.screenEffectScale().get().floatValue();
+		float j = Mth.lerp(partialTicks, localPlayer.oPortalEffectIntensity, localPlayer.portalEffectIntensity);
+		float k = localPlayer.getEffectBlendFactor(MobEffects.NAUSEA, partialTicks);
+		float l = Math.max(j, k) * (i * i);
+		if (l > 0.0F) {
+			float m = 5.0F / (l * l + 5.0F) - l * 0.04F;
+			m *= m;
 			Vector3f vector3f = new Vector3f(0.0F, Mth.SQRT_OF_TWO / 2.0F, Mth.SQRT_OF_TWO / 2.0F);
-			float l = ((float)this.confusionAnimationTick + partialTicks) * (float)j * (float) (Math.PI / 180.0);
-			matrix4f.rotate(l, vector3f);
-			matrix4f.scale(1.0F / k, 1.0F, 1.0F);
-			matrix4f.rotate(-l, vector3f);
+			float n = (this.spinningEffectTime + partialTicks * this.spinningEffectSpeed) * (float) (Math.PI / 180.0);
+			matrix4f.rotate(n, vector3f);
+			matrix4f.scale(1.0F / m, 1.0F, 1.0F);
+			matrix4f.rotate(-n, vector3f);
 		}
 		return matrix4f;
 	}
