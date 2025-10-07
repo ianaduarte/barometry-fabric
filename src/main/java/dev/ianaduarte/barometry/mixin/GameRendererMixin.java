@@ -18,9 +18,6 @@ import org.spongepowered.asm.mixin.Shadow;
 @Mixin(GameRenderer.class)
 public abstract class GameRendererMixin implements ProjectionGetter {
 	@Shadow @Final private Camera mainCamera;
-	@Shadow private float zoom;
-	@Shadow private float zoomX;
-	@Shadow private float zoomY;
 	@Shadow @Final private Minecraft minecraft;
 	@Shadow protected abstract void bobHurt(PoseStack poseStack, float partialTicks);
 	@Shadow protected abstract void bobView(PoseStack poseStack, float partialTicks);
@@ -31,12 +28,11 @@ public abstract class GameRendererMixin implements ProjectionGetter {
 	
 	public Matrix4f fetchProjectionMatrix(float farPlane, float partialTicks) {
 		float fov = this.getFov(this.mainCamera, partialTicks, true);
-		Matrix4f matrix4f = new Matrix4f();
-		if (this.zoom != 1.0F) {
-			matrix4f.translate(this.zoomX, -this.zoomY, 0.0F);
-			matrix4f.scale(this.zoom, this.zoom, 1.0F);
-		}
-		matrix4f.perspective(fov * (float) (Math.PI / 180.0), (float)this.minecraft.getWindow().getWidth() / this.minecraft.getWindow().getHeight(), 0.05F, farPlane);
+		Matrix4f matrix4f = new Matrix4f().perspective(
+			fov * (float) (Math.PI / 180.0),
+			(float)this.minecraft.getWindow().getWidth() / this.minecraft.getWindow().getHeight(),
+			0.05F, farPlane
+		);
 		LocalPlayer localPlayer = this.minecraft.player;
 		
 		PoseStack poseStack = new PoseStack();
