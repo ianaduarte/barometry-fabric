@@ -13,7 +13,8 @@
 	"icon": "assets/icon.png",
 	"environment": "*",
 	"entrypoints": {
-		"main": ["${group}.${id}.${Id}"]
+		"main": ["${group}.${id}.${Id}"],
+		"client": ["${group}.${id}.${Id}Client"]
 	},
 	"accessWidener": "${id}.accesswidener",
 	"mixins": ["${id}.mixins.json"],

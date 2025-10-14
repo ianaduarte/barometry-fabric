@@ -3,12 +3,18 @@
 	"package": "dev.ianaduarte.barometry.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
+		"EntityMixin",
+		"ServerLevelMixin",
+		"ServerPlayerMixin"
 	],
 	"client": [
-		"CloudRendererMixin",
+		"ClientHandshakeMixin",
+		"ClientPacketMixin",
 		"GameRendererMixin",
-		"LevelRendererMixin"
+		"LevelRendererMixin",
+		"OptionsMixin"
 	],
 	"injectors": {
-		"defaultRequire": 1}
+		"defaultRequire": 1
+	}
 }

@@ -3,36 +3,49 @@
 #moj_import <minecraft:fog.glsl>
 #moj_import <minecraft:dynamictransforms.glsl>
 #moj_import <minecraft:projection.glsl>
-
-layout(std140) uniform CloudInfo {
-    vec4 CloudColor;
-    vec2 CloudUV;
-    float CloudHeight;
-    float CloudForecast;
-    vec2 CloudOffsets;
-};
+#moj_import <barometry:math.glsl>
+#moj_import <barometry:cloudinfo.glsl>
 
 in vec3 Position;
 in vec2 UV0;
+in int Layer;
 
 out vec2 texCoord0;
 out vec4 vertexColor;
-out float vertexHeight;
 
 void main() {
-	//float softness = clamp((((1.0 - UV0.x) * UV0.x * 12.0) * ((1.0 - UV0.y) * UV0.y * 12.0)), 0, 1);
-	//float softness_x = abs(UV0.x - 0.5);
-	//float softness_y = abs(UV0.y - 0.5);
+	vec3 pos = Position;
+	int id = gl_InstanceID;
 	
-	// Take the maximum of the two to create a square shape that increases towards the edges.
-	//float softness = max(softness_x, softness_y) * 2.0;
-	//softness = pow(softness, 8);
-	vec3 pos = Position * 12.0;
-	//pos.y -= softness * 64 * 12;
+	//forecast texture has 1px padding all around to account for movement
+	int layer_diameter = CloudLayerDiameter - 2;
+	float tile_factor = 1.0 / layer_diameter;
+	float half_width = layer_diameter / 2;
+	
+	vec2 instance_pos = vec2(
+		float(id / layer_diameter),
+		float(id % layer_diameter)
+	);
+	pos.xz += instance_pos - vec2(half_width);
+	
+	vec2 normalized_pos = (instance_pos + UV0) * tile_factor;
+	float gradient_factor = 1 - square_gradient(normalized_pos.x, normalized_pos.y, 4.1);
+	pos.y -= gradient_factor * 16;
+	
+	pos *= 16.0;
 	pos.y += CloudHeight;
-	gl_Position = ProjMat * ModelViewMat * vec4(pos, 1.0);
 	
-	texCoord0 = UV0;
+	////UVS MUST ACCOUNT FOR THE PADDING!!!! ITS ONE PIXEL!!! NOT ONE TEXEL!!!
+	////pixel -> pixel on the actual image (0, CloudLayerWidth]
+	////texel -> pixel without padding (0, CloudLayerWidth-2]
+	float uv_factor = 1.0 / (CloudLayerDiameter);
+	vec2 tile_pos = (instance_pos) * uv_factor + vec2(uv_factor);
+	
+	////how far from the center of the current chunk the camera is
+	vec2 frac_pos = CloudUVOffset * 0.5;
+	//texCoord0 = UV0 * uv_factor + tile_pos + frac_pos;
+	
+	gl_Position = ProjMat * ModelViewMat * vec4(pos, 1.0);
+	texCoord0 = (UV0 + frac_pos) * uv_factor + tile_pos;
 	vertexColor = CloudColor;
-	vertexHeight = CloudHeight;
 }
